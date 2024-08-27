@@ -1,3 +1,9 @@
+# Tools
+.tools
+
+# NPM cache
+.npm-cache
+
 # Intellij
 *.iml
 .idea

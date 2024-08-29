@@ -1,9 +1,11 @@
 /** Functional return type for error handling. */
 export class Success<T, E> {
     public successful: true;
+    public value: T;
 
-    public constructor(public value: T) {
+    public constructor(value: T) {
         this.successful = true;
+        this.value = value;
     }
 
     public map<U>(f: (a: T) => U): Result<U, E> {
@@ -38,9 +40,11 @@ export class Success<T, E> {
 /** Functional return type for error handling. */
 export class Failure<T, E> {
     public successful: false;
+    public error: E;
 
-    public constructor(public error: E) {
+    public constructor(error: E) {
         this.successful = false;
+        this.error = error;
     }
 
     public map<U>(_f: (a: T) => U): Result<U, E> {

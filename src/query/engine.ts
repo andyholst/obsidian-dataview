@@ -46,7 +46,7 @@ function executeCore(rows: Pagerow[], context: Context, ops: QueryOperation[]): 
 
         switch (op.type) {
             case "where": {
-                const whereResult = rows.filter((row, index) => {
+                rows = rows.filter((row, index) => {
                     const valueResult = context.evaluate(op.clause, row.data);
                     if (!valueResult.successful) {
                         errors.push({ index, message: valueResult.error });
@@ -54,13 +54,11 @@ function executeCore(rows: Pagerow[], context: Context, ops: QueryOperation[]): 
                     }
                     return Values.isTruthy(valueResult.value);
                 });
-                rows = whereResult;
                 break;
             }
             case "sort": {
-                const sortFields = op.fields;
                 rows.sort((a, b) => {
-                    for (const { field, direction } of sortFields) {
+                    for (const { field, direction } of op.fields) {
                         const factor = direction === "ascending" ? 1 : -1;
                         const valAResult = context.evaluate(field, a.data);
                         const valBResult = context.evaluate(field, b.data);
@@ -97,14 +95,15 @@ function executeCore(rows: Pagerow[], context: Context, ops: QueryOperation[]): 
                 break;
             }
             case "group": {
-                const groupData: { data: Pagerow; key: Literal }[] = rows.map((row, index) => {
+                const groupData = rows.reduce<{ data: Pagerow; key: Literal }[]>((acc, row, index) => {
                     const valueResult = context.evaluate(op.field.field, row.data);
                     if (!valueResult.successful) {
                         errors.push({ index, message: valueResult.error });
-                        return null;
+                        return acc;
                     }
-                    return { data: row, key: valueResult.value };
-                }).filter(Boolean) as { data: Pagerow; key: Literal }[];
+                    acc.push({ data: row, key: valueResult.value });
+                    return acc;
+                }, []);
 
                 groupData.sort((a, b) => {
                     if (context.binaryOps.evaluate("<", a.key, b.key, context).orElse(false)) return -1;
@@ -112,33 +111,35 @@ function executeCore(rows: Pagerow[], context: Context, ops: QueryOperation[]): 
                     return 0;
                 });
 
-                const finalGroupData: { key: Literal; rows: DataObject[]; [groupKey: string]: Literal }[] = [];
-                for (const { key, data } of groupData) {
-                    if (finalGroupData.length === 0 || !context.binaryOps.evaluate("=", key, finalGroupData[finalGroupData.length - 1].key, context).orElse(false)) {
-                        finalGroupData.push({ key, rows: [data.data], [op.field.name]: key });
+                const finalGroupData = groupData.reduce<{ key: Literal; rows: DataObject[]; [groupKey: string]: Literal }[]>((acc, { key, data }) => {
+                    const lastGroup = acc[acc.length - 1];
+                    if (!lastGroup || !context.binaryOps.evaluate("=", key, lastGroup.key, context).orElse(false)) {
+                        acc.push({ key, rows: [data.data], [op.field.name]: key });
                     } else {
-                        finalGroupData[finalGroupData.length - 1].rows.push(data.data);
+                        lastGroup.rows.push(data.data);
                     }
-                }
+                    return acc;
+                }, []);
+
                 rows = finalGroupData.map(d => ({ id: d.key, data: d }));
                 identMeaning = { type: "group", name: op.field.name, on: identMeaning };
                 break;
             }
             case "flatten": {
-                const flattenResult: Pagerow[] = [];
-                for (const row of rows) {
+                const flattenResult = rows.reduce<Pagerow[]>((acc, row) => {
                     const valueResult = context.evaluate(op.field.field, row.data);
                     if (!valueResult.successful) {
                         errors.push({ index: rows.indexOf(row), message: valueResult.error });
-                        continue;
+                        return acc;
                     }
                     const datapoints = Values.isArray(valueResult.value) ? valueResult.value : [valueResult.value];
-                    for (const v of datapoints) {
-                        const copy = Values.deepCopy(row);
-                        copy.data[op.field.name] = v;
-                        flattenResult.push(copy);
-                    }
-                }
+                    datapoints.forEach(v => {
+                        const copy = { ...row, data: { ...row.data, [op.field.name]: v } };
+                        acc.push(copy);
+                    });
+                    return acc;
+                }, []);
+
                 rows = flattenResult;
                 if (identMeaning.type == "group" && identMeaning.name == op.field.name) {
                     identMeaning = identMeaning.on;
@@ -177,18 +178,23 @@ export function executeCoreExtract(rows: Pagerow[], context: Context, ops: Query
     const core = internal.value;
     const startTime = Date.now();
     const errors: ExecutionError[] = [];
-    const res = core.data.map((row, index) => {
+    const res = core.data.reduce<Pagerow[]>((acc, row, index) => {
         const page: Pagerow = { id: row.id, data: {} };
+        let isValid = true;
+
         for (const [name, field] of Object.entries(fields)) {
             const valueResult = context.evaluate(field, row.data);
             if (!valueResult.successful) {
                 errors.push({ index, message: valueResult.error });
-                return null;
+                isValid = false;
+                break;
             }
             page.data[name] = valueResult.value;
         }
-        return page;
-    }).filter(Boolean) as Pagerow[];
+
+        if (isValid) acc.push(page);
+        return acc;
+    }, []);
 
     if (errors.length >= core.data.length && core.data.length > 0) {
         return Result.failure(`Every row during final data extraction failed with an error; first ${Math.max(errors.length, 3)}:\n${errors.slice(0, 3).map(d => "- " + d.message).join("\n")}`);

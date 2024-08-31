@@ -13,6 +13,7 @@ function iden<T>(x: T): T {
     return x;
 }
 
+/** Interface for capturing diagnostic information during query execution. */
 export interface OperationDiagnostics {
     timeMs: number;
     incomingRows: number;
@@ -20,12 +21,16 @@ export interface OperationDiagnostics {
     errors: ExecutionError[];
 }
 
+/** Represents the meaning of an identifier within the context of a query execution. */
 export type IdentifierMeaning = { type: "group"; name: string; on: IdentifierMeaning } | { type: "path" };
 
+/** Type alias for a row of data associated with an object. */
 export type Pagerow = Datarow<DataObject>;
 
+/** Represents an error encountered during query execution. */
 export type ExecutionError = { index: number; message: string };
 
+/** Interface for the core execution results, including timing, data, and operations. */
 export interface CoreExecution {
     data: Pagerow[];
     idMeaning: IdentifierMeaning;
@@ -34,6 +39,13 @@ export interface CoreExecution {
     diagnostics: OperationDiagnostics[];
 }
 
+/**
+ * Executes a series of query operations on a set of data rows.
+ * @param rows The data rows to operate on.
+ * @param context The execution context for evaluating operations.
+ * @param ops The list of operations to execute.
+ * @returns A result containing the execution details or an error message.
+ */
 function executeCore(rows: Pagerow[], context: Context, ops: QueryOperation[]): Result<CoreExecution, string> {
     const diagnostics: OperationDiagnostics[] = [];
     let identMeaning: IdentifierMeaning = { type: "path" };
@@ -171,6 +183,14 @@ function executeCore(rows: Pagerow[], context: Context, ops: QueryOperation[]): 
     });
 }
 
+/**
+ * Executes a core query and then extracts specific fields from the result.
+ * @param rows The data rows to operate on.
+ * @param context The execution context for evaluating operations.
+ * @param ops The list of operations to execute.
+ * @param fields The fields to extract after the operations.
+ * @returns A result containing the extracted data or an error message.
+ */
 export function executeCoreExtract(rows: Pagerow[], context: Context, ops: QueryOperation[], fields: Record<string, Field>): Result<CoreExecution, string> {
     const internal = executeCore(rows, context, ops);
     if (!internal.successful) return internal;
@@ -210,12 +230,21 @@ export function executeCoreExtract(rows: Pagerow[], context: Context, ops: Query
     });
 }
 
+/** Interface for the result of executing a list-based query. */
 export interface ListExecution {
     core: CoreExecution;
     data: Literal[];
     primaryMeaning: IdentifierMeaning;
 }
 
+/**
+ * Executes a list-based query and returns the final results.
+ * @param query The query to execute.
+ * @param index The full index to resolve the query against.
+ * @param origin The origin of the query.
+ * @param settings The query settings.
+ * @returns A result containing the list execution data or an error message.
+ */
 export async function executeList(query: Query, index: FullIndex, origin: string, settings: QuerySettings): Promise<Result<ListExecution, string>> {
     const fileset = await resolveSource(query.source, index, origin);
     if (!fileset.successful) return Result.failure(fileset.error);
@@ -237,6 +266,7 @@ export async function executeList(query: Query, index: FullIndex, origin: string
     });
 }
 
+/** Interface for the result of executing a table query. */
 export interface TableExecution {
     core: CoreExecution;
     names: string[];
@@ -244,6 +274,14 @@ export interface TableExecution {
     idMeaning: IdentifierMeaning;
 }
 
+/**
+ * Executes a table-based query and returns the final results.
+ * @param query The query to execute.
+ * @param index The full index to resolve the query against.
+ * @param origin The origin of the query.
+ * @param settings The query settings.
+ * @returns A result containing the table execution data or an error message.
+ */
 export async function executeTable(query: Query, index: FullIndex, origin: string, settings: QuerySettings): Promise<Result<TableExecution, string>> {
     const fileset = await resolveSource(query.source, index, origin);
     if (!fileset.successful) return Result.failure(fileset.error);
@@ -269,11 +307,18 @@ export async function executeTable(query: Query, index: FullIndex, origin: strin
     });
 }
 
+/** Interface for the result of executing a task-based query. */
 export interface TaskExecution {
     core: CoreExecution;
     tasks: Grouping<SListItem>;
 }
 
+/**
+ * Recursively extracts task groupings from the result of a query execution.
+ * @param id The identifier meaning for grouping.
+ * @param rows The data rows to extract from.
+ * @returns The extracted task groupings.
+ */
 function extractTaskGroupings(id: IdentifierMeaning, rows: DataObject[]): Grouping<SListItem> {
     return id.type === "path"
         ? rows as SListItem[]
@@ -283,6 +328,14 @@ function extractTaskGroupings(id: IdentifierMeaning, rows: DataObject[]): Groupi
         }));
 }
 
+/**
+ * Executes a task-based query and returns all matching tasks.
+ * @param query The query to execute.
+ * @param origin The origin of the query.
+ * @param index The full index to resolve the query against.
+ * @param settings The query settings.
+ * @returns A result containing the task execution data or an error message.
+ */
 export async function executeTask(query: Query, origin: string, index: FullIndex, settings: QuerySettings): Promise<Result<TaskExecution, string>> {
     const fileset = matchingSourcePaths(query.source, index, origin);
     if (!fileset.successful) return Result.failure(fileset.error);
@@ -316,6 +369,14 @@ export async function executeTask(query: Query, origin: string, index: FullIndex
     }));
 }
 
+/**
+ * Executes an inline query for a single field and returns the evaluated result.
+ * @param field The field to evaluate.
+ * @param origin The origin of the query.
+ * @param index The full index to resolve the query against.
+ * @param settings The query settings.
+ * @returns A result containing the evaluated value or an error message.
+ */
 export function executeInline(field: Field, origin: string, index: FullIndex, settings: QuerySettings): Result<Literal, string> {
     const context = new Context(defaultLinkHandler(index, origin), settings, {
         this: index.pages.get(origin)?.serialize(index) ?? {},
@@ -329,6 +390,12 @@ export function executeInline(field: Field, origin: string, index: FullIndex, se
     return Result.success(result.value);
 }
 
+/**
+ * Creates a default link handler for resolving links within a query context.
+ * @param index The full index to resolve links against.
+ * @param origin The origin of the query.
+ * @returns A link handler for resolving, normalizing, and checking link existence.
+ */
 export function defaultLinkHandler(index: FullIndex, origin: string): LinkHandler {
     return {
         resolve: link => {
@@ -346,11 +413,20 @@ export function defaultLinkHandler(index: FullIndex, origin: string): LinkHandle
     };
 }
 
+/** Interface for the result of executing a calendar-based query. */
 export interface CalendarExecution {
     core: CoreExecution;
     data: { date: DateTime; link: Link; value?: Literal[] }[];
 }
 
+/**
+ * Executes a calendar-based query and returns the final results.
+ * @param query The query to execute.
+ * @param index The full index to resolve the query against.
+ * @param origin The origin of the query.
+ * @param settings The query settings.
+ * @returns A result containing the calendar execution data or an error message.
+ */
 export async function executeCalendar(query: Query, index: FullIndex, origin: string, settings: QuerySettings): Promise<Result<CalendarExecution, string>> {
     const fileset = await resolveSource(query.source, index, origin);
     if (!fileset.successful) return Result.failure(fileset.error);

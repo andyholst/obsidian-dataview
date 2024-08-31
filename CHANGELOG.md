@@ -1,3 +1,30 @@
+# 0.5.67.2
+
+Updated Query for Performance & Memory Efficiency
+
+Reason: There was a lot of performance hickups on a laptop and on Android with low memory footprint, so there was a need
+to fix that performance and memory bottleneck when you represent Markdown data causing lower risk for hickups & crashes.
+
+- Removed unnecessary deep copies of rows and objects, reducing memory usage.
+- Optimized sorting logic to minimize redundant evaluations and improve performance.
+- Added early exits upon error detection to prevent unnecessary processing.
+- Combined multi-pass operations into single-pass iterations where possible.
+- Streamlined grouping and flattening operations to avoid large intermediate data structures.
+- Reduced redundant object creation and consolidated type checks for efficiency.
+- Simplified object creation and minimized the use of temporary data structures.
+
+- @andyholst: Refactored the engine.ts to increase performanced and lower the memory footprint
+
+---
+
+# 0.5.67.1
+
+Created a Makefile and Docker-Compose to easily build the dataview plugin in a Linux context with the command "make run". Some changes needed to be done for the package.json file to be able to build the main.js file.
+
+- @andyholst: Created the Makefile and Docker Compose setup to easily build the dataview js file in a Linux environment.
+
+---
+
 # 0.5.67
 
 Includes several documentation fixes and several community-contributed bug fixes.
@@ -278,7 +305,7 @@ will be finishing up the associated new "extension" functionality shortly, which
 2. For custom renderable objects (progress bars, embedded task lists, embedded tables) to be added to any Dataview view via plugins.
 3. For plugins to provide alternative behavior for some dataview functionality (such as integrating task plugins with
    the dataview task query).
-   
+
 As part of the API revamp, it is now possible to programmatically execute Dataview and DataviewJS queries - either for
 using the existing Dataview query language in your own plugin, or for embedding dataview. The Dataview npm library also
 now exposes many useful internal Dataview types, including the AST structure for all dataview queries.
